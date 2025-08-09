@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Отладочные маршруты
+RewriteRule ^debug$ debug.php [L]
+RewriteRule ^test$ test.php [L]
+RewriteRule ^test-placement$ test-placement.php [L]
+RewriteRule ^check-placements$ check-placements.php [L]
+RewriteRule ^simple-test$ simple-test.php [L]
+RewriteRule ^placement-info$ placement-info.php [L]
+
+# Все остальные запросы идут на index.php
+RewriteRule ^$ index.php [L] 

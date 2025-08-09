@@ -1,0 +1,44 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment files
+.env.local
+.env.*.local
+
+# Logs
+/logs/
+*.log
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Cache
+cache/
+temp/
+tmp/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# PHP specific
+*.cache
+composer.phar
+
+# Application specific
+installer.log
