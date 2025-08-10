@@ -351,7 +351,9 @@ show_completion_page:
         <h1>Установка завершена!</h1>
         <p class="subtitle">Приложение успешно интегрировано в ваш Битрикс24.</p>
         <p class="subtitle">Для запуска калькулятора нажмите на кнопку "LED Калькулятор" в меню таймлайна сделки.</p>
-        <button class="close-btn" onclick="BX24.closeApplication()">Закрыть</button>
+        <a href="https://ledts.bitrix24.ru/devops/" target="_blank">
+            <button class="close-btn" onclick="BX24.closeApplication()">Закрыть</button>
+        </a>
         <div class="brand">
             <a href="https://dimpin-app.store/" target="_blank">
                 <img src="https://cdn-ru.bitrix24.ru/b30896596/bitrix24/c82/c82175cad74850b46550b565bc98c38d/logo_biwaa2f5kc.png" alt="DIMPIN APP STORE">
