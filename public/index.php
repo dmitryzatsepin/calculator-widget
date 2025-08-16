@@ -1,5 +1,11 @@
 <?php
 // index.php - МАКСИМАЛЬНО ЛЁГКИЙ ОБРАБОТЧИК РАЗМЕЩЕНИЯ
+error_log("=== INDEX.PHP START ===");
+error_log("INDEX.PHP: Request URI: " . $_SERVER["REQUEST_URI"]);
+error_log("INDEX.PHP: Request Method: " . $_SERVER["REQUEST_METHOD"]);
+error_log("INDEX.PHP: Script Name: " . $_SERVER["SCRIPT_NAME"]);
+error_log("INDEX.PHP: Document Root: " . $_SERVER["DOCUMENT_ROOT"]);
+error_log("INDEX.PHP: Current Directory: " . __DIR__);
 
 // ОТЛАДКА - записываем в лог что приходит
 error_log('INDEX.PHP CALLED with params: ' . print_r($_REQUEST, true));
@@ -135,4 +141,5 @@ try {
     echo '<iframe src="https://dimpin-app.store/apps/led-calculator/" width="100%" height="600px" frameborder="0" allow="scripts, forms" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>';
     echo '</body></html>';
 }
+error_log("=== INDEX.PHP END ===");
 ?>
