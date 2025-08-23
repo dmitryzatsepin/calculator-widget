@@ -1,145 +1,139 @@
 <?php
-// index.php - МАКСИМАЛЬНО ЛЁГКИЙ ОБРАБОТЧИК РАЗМЕЩЕНИЯ
-error_log("=== INDEX.PHP START ===");
-error_log("INDEX.PHP: Request URI: " . $_SERVER["REQUEST_URI"]);
-error_log("INDEX.PHP: Request Method: " . $_SERVER["REQUEST_METHOD"]);
-error_log("INDEX.PHP: Script Name: " . $_SERVER["SCRIPT_NAME"]);
-error_log("INDEX.PHP: Document Root: " . $_SERVER["DOCUMENT_ROOT"]);
-error_log("INDEX.PHP: Current Directory: " . __DIR__);
 
-// ОТЛАДКА - записываем в лог что приходит
-error_log('INDEX.PHP CALLED with params: ' . print_r($_REQUEST, true));
-error_log('INDEX.PHP Headers: ' . print_r(getallheaders(), true));
+declare(strict_types=1);
 
-// Проверяем сессию установки
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-$installCompleted = isset($_SESSION['install_completed']) && $_SESSION['install_completed'] === true;
-$installTime = $_SESSION['install_time'] ?? 0;
+use Bitrix24\SDK\Services\ServiceBuilderFactory;
+use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+use Psr\Log\NullLogger;
 
-// Дополнительная проверка через cookies
-$cookieInstallCompleted = isset($_COOKIE['b24_install_completed']) && $_COOKIE['b24_install_completed'] === 'true';
-$cookieInstallTime = isset($_COOKIE['b24_install_time']) ? (int)$_COOKIE['b24_install_time'] : 0;
+require_once __DIR__ . '/../vendor/autoload.php';
 
-// Устанавливаем флаг установки если есть в cookies
-if ($cookieInstallCompleted && !$installCompleted) {
-    $installCompleted = true;
-    $installTime = $cookieInstallTime;
-    $_SESSION['install_completed'] = true;
-    $_SESSION['install_time'] = $installTime;
+// Проверяем наличие основных параметров
+if (!isset($_REQUEST['PLACEMENT']) || 
+    !isset($_REQUEST['AUTH_ID']) || 
+    !isset($_REQUEST['member_id']) || 
+    !isset($_REQUEST['DOMAIN'])) {
+    
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html><head><title>Access Denied</title></head><body><div style="padding:20px;text-align:center;"><h3>Доступ запрещен</h3><p>Недостаточно прав для доступа к калькулятору</p></div></body></html>';
+    exit;
 }
 
-error_log('INDEX.PHP Session check - install_completed: ' . ($installCompleted ? 'true' : 'false') . ', install_time: ' . $installTime);
-error_log('INDEX.PHP Cookie check - install_completed: ' . ($cookieInstallCompleted ? 'true' : 'false') . ', install_time: ' . $cookieInstallTime);
+// Инициализируем профиль приложения согласно SDK
+$appProfile = ApplicationProfile::initFromArray([
+    'BITRIX24_PHP_SDK_APPLICATION_CLIENT_ID' => $_REQUEST['AUTH_ID'] ?? '',
+    'BITRIX24_PHP_SDK_APPLICATION_CLIENT_SECRET' => $_REQUEST['REFRESH_ID'] ?? '',
+    'BITRIX24_PHP_SDK_APPLICATION_SCOPE' => 'crm,user,placement'
+]);
 
-// Заголовки для работы во фрейме Битрикс24
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Content-Security-Policy: frame-ancestors *;');
+try {
+    // Создаем сервис с использованием SDK
+    $b24Service = ServiceBuilderFactory::createServiceBuilderFromPlacementRequest(
+        Request::createFromGlobals(), 
+        $appProfile,
+        new EventDispatcher(),
+        new NullLogger()
+    );
+    
+} catch (Exception $e) {
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html><head><title>Error</title></head><body><div style="padding:20px;text-align:center;"><h3>Ошибка</h3><p>Не удалось подключиться к Bitrix24</p></div></body></html>';
+    exit;
+}
 
-// ПОЛУЧАЕМ ID СДЕЛКИ ИЗ PLACEMENT_OPTIONS (если есть)
+// Получаем ID сделки из PLACEMENT_OPTIONS
 $dealId = null;
 if (isset($_REQUEST['PLACEMENT_OPTIONS']) && !empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     $placementOptions = json_decode($_REQUEST['PLACEMENT_OPTIONS'], true);
     if (isset($placementOptions['ID']) && !empty($placementOptions['ID']) && $placementOptions['ID'] !== '{{ID}}') {
         $dealId = $placementOptions['ID'];
-        error_log('INDEX.PHP: Got deal ID from PLACEMENT_OPTIONS: ' . $dealId);
     }
 }
 
-// ЕСЛИ ЭТО УСТАНОВКА, ПРОВЕРКА ИЛИ АВТОМАТИЧЕСКАЯ ПРОВЕРКА РАЗМЕЩЕНИЯ - НЕ ПОКАЗЫВАЕМ КАЛЬКУЛЯТОР
-if (empty($_REQUEST) || 
-    (isset($_REQUEST['ID']) && $_REQUEST['ID'] === '{{ID}}') ||
-    (isset($_REQUEST['install_check']) && $_REQUEST['install_check'] === 'Y') ||
-    (isset($_REQUEST['event']) && $_REQUEST['event'] === 'ONAPPINSTALL') ||
-    (isset($_REQUEST['member_id']) && isset($_REQUEST['AUTH_ID']) && isset($_REQUEST['DOMAIN']) && !isset($_REQUEST['PLACEMENT'])) ||
-    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: если это автоматическая проверка размещения после установки
-    (isset($_REQUEST['PLACEMENT']) && $_REQUEST['PLACEMENT'] === 'CRM_DEAL_DETAIL_ACTIVITY' && 
-     (!isset($_REQUEST['ID']) || $_REQUEST['ID'] === '{{ID}}' || empty($_REQUEST['ID'])) && !$dealId) ||
-    // НОВАЯ ПРОВЕРКА: если это вызов после установки с параметрами установки
-    (isset($_REQUEST['install_finished']) && $_REQUEST['install_finished'] === 'Y') ||
-    // ПРОВЕРКА: если это тестовый вызов без реального ID сделки
-    (isset($_REQUEST['PLACEMENT']) && !isset($_REQUEST['ID']) && !$dealId) ||
-    // ПРОВЕРКА: если это проверка готовности размещения
-    (isset($_REQUEST['placement_ready']) && $_REQUEST['placement_ready'] === 'Y') ||
-    // ПРОВЕРКА: если это вызов от установщика или проверки
-    (isset($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'Bitrix24') !== false && 
-     (!isset($_REQUEST['PLACEMENT']) || (empty($_REQUEST['ID']) && !$dealId) || $_REQUEST['ID'] === '{{ID}}')) ||
-    // ПРОВЕРКА: если это вызов сразу после установки (в течение 5 минут)
-    (isset($_REQUEST['member_id']) && isset($_REQUEST['AUTH_ID']) && isset($_REQUEST['DOMAIN']) && 
-     (!isset($_REQUEST['PLACEMENT']) || (empty($_REQUEST['ID']) && !$dealId))) ||
-    // ПРОВЕРКА: если это вызов с параметрами установки
-    (isset($_REQUEST['event']) && $_REQUEST['event'] === 'ONAPPINSTALL') ||
-    // ПРОВЕРКА: если установка была завершена недавно (в течение 10 минут)
-    ($installCompleted && (time() - $installTime) < 600) ||
-    // ПРОВЕРКА: если установка была завершена недавно через cookies (в течение 10 минут)
-    ($cookieInstallCompleted && (time() - $cookieInstallTime) < 600) ||
-    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: если это вызов без реального ID сделки
-    ((!isset($_REQUEST['ID']) || $_REQUEST['ID'] === '{{ID}}' || empty($_REQUEST['ID'])) && !$dealId)) {
+$finalDealId = $dealId ?? $_REQUEST['ID'] ?? 'demo';
+
+// Заголовки для работы во фрейме Битрикс24
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Content-Security-Policy: frame-ancestors * https://ledts.bitrix24.ru https://*.bitrix24.ru;');
+header('X-Frame-Options: ALLOWALL');
+header('X-Content-Type-Options: nosniff');
+
+// Передаем параметры в калькулятор
+$queryParams = http_build_query([
+    'dealId' => $finalDealId,
+    'userId' => 'current',
+    'domain' => $_REQUEST['DOMAIN'],
+    'authId' => $_REQUEST['AUTH_ID'],
+    'memberId' => $_REQUEST['member_id']
+]);
+
+// Показываем калькулятор в iframe
+echo '<!DOCTYPE html>
+<html>
+<head>
+    <title>LED Калькулятор</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        .loading { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            background: #f5f5f5; 
+        }
+        .spinner { 
+            width: 40px; 
+            height: 40px; 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #3498db; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+            margin-right: 15px; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        iframe { 
+            width: 100%; 
+            height: 100vh; 
+            border: none; 
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>Идет загрузка приложения LED Калькулятор</div>
+    </div>
     
-    error_log('INDEX.PHP: Showing empty page for installation/check/auto-verification');
-    // Показываем пустую страницу для проверки размещения и установки
-    header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html><html><head><title>Ready</title></head><body><div style="display:none;">Installation check - showing empty page</div><script>console.log("Installation check page shown");</script></body></html>';
-    exit;
-}
-
-error_log('INDEX.PHP: This is a real placement call with real deal ID, showing calculator');
-error_log('INDEX.PHP: Deal ID: ' . ($dealId ?? $_REQUEST['ID'] ?? 'NOT_SET') . ', Placement: ' . ($_REQUEST['PLACEMENT'] ?? 'NOT_SET'));
-
-// Проверяем автозагрузчик
-if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
-    die('ERROR: vendor/autoload.php not found');
-}
-
-require_once __DIR__ . '/../vendor/autoload.php';
-
-use Bitrix24\SDK\Core\ApiClient;
-use Bitrix24\SDK\Core\ApiLevelErrorHandler;
-use Bitrix24\SDK\Core\Core;
-use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
-use Bitrix24\SDK\Core\Credentials\AuthToken;
-use Bitrix24\SDK\Core\Credentials\Credentials;
-use Bitrix24\SDK\Core\Credentials\Scope;
-use Bitrix24\SDK\Infrastructure\HttpClient\RequestId\DefaultRequestIdGenerator;
-use Monolog\Logger;
-use Symfony\Component\EventDispatcher\EventDispatcher;
-use Symfony\Component\HttpClient\HttpClient;
-
-try {
-    // Создаем Credentials
-    $authToken = new AuthToken($_REQUEST['AUTH_ID'], $_REQUEST['REFRESH_ID'] ?? null, time() + 3600);
-    $appProfile = new ApplicationProfile($_REQUEST['member_id'], 'dummy_secret', new Scope(['crm', 'user', 'placement']));
-    $credentials = Credentials::createFromOAuth($authToken, $appProfile, $_REQUEST['DOMAIN']);
-
-    // Инициализация SDK
-    $apiClient = new ApiClient($credentials, HttpClient::create(), new DefaultRequestIdGenerator(), new ApiLevelErrorHandler(new Logger('dummy')), new Logger('dummy'));
-    $core = new Core($apiClient, new ApiLevelErrorHandler(new Logger('dummy')), new EventDispatcher(), new Logger('dummy'));
-
-    // Получаем ID сделки (приоритет: PLACEMENT_OPTIONS -> $_REQUEST['ID] -> demo)
-    $finalDealId = $dealId ?? $_REQUEST['ID'] ?? $_REQUEST['id'] ?? 'demo';
+    <iframe id="calculator-frame" src="https://dimpin-app.store/apps/led-calculator/index.html#' . htmlspecialchars($queryParams, ENT_QUOTES, 'UTF-8') . '" 
+            allow="fullscreen"
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-presentation"
+            style="display: none;">
+    </iframe>
     
-    // Передаем параметры в калькулятор
-    $queryParams = http_build_query([
-        'dealId' => $finalDealId, 
-        'userId' => 'current',
-        'domain' => $_REQUEST['DOMAIN'] ?? 'unknown.bitrix24.ru', 
-        'authId' => $_REQUEST['AUTH_ID'] ?? 'demo_auth', 
-        'memberId' => $_REQUEST['member_id'] ?? 'demo_member'
-    ]);
-    
-    error_log('INDEX.PHP: Showing calculator with params: ' . $queryParams);
-    
-    // Показываем калькулятор в iframe ТОЛЬКО при реальном вызове из карточки сделки
-    echo '<!DOCTYPE html><html><head><title>LED калькулятор</title><script src="//api.bitrix24.com/api/v1/"></script><style>html,body{margin:0;padding:0;height:100%;}iframe{border:0;width:100%;height:100%;}</style></head><body><iframe src="https://dimpin-app.store/apps/led-calculator/?' . htmlspecialchars($queryParams, ENT_QUOTES, 'UTF-8') . '" allow="scripts, forms" sandbox="allow-scripts allow-forms allow-same-origin"></iframe></body></html>';
-    
-} catch (Exception $e) {
-    error_log('INDEX.PHP: Exception: ' . $e->getMessage());
-    // Fallback - показываем калькулятор без параметров
-    echo '<!DOCTYPE html><html><head><title>LED калькулятор</title></head><body>';
-    echo '<iframe src="https://dimpin-app.store/apps/led-calculator/" width="100%" height="600px" frameborder="0" allow="scripts, forms" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>';
-    echo '</body></html>';
-}
-error_log("=== INDEX.PHP END ===");
+    <script>
+        document.getElementById("calculator-frame").onload = function() {
+            var loading = document.getElementById("loading");
+            var iframe = document.getElementById("calculator-frame");
+            
+            if (loading) {
+                loading.style.display = "none";
+            }
+            
+            if (iframe) {
+                iframe.style.display = "block";
+            }
+        };
+    </script>
+</body>
+</html>';
 ?>
