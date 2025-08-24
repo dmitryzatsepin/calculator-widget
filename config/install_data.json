@@ -1,0 +1,21 @@
+{
+    "auth_id": "1ee9aa68007b749a006cd3c800000302201c07d9a7c6198c5f17881c660b0a38953162",
+    "refresh_id": "0e68d268007b749a006cd3c800000302201c072fc52be0daded47afdef575535b1c4cb",
+    "domain": "ledts.bitrix24.ru",
+    "member_id": "2ed3b3005a7c2a8f82e51326f960a106",
+    "app_sid": "5692a26ab22f8b93a76eeab6fa51ec57",
+    "install_time": "2025-08-24 09:27:43",
+    "all_params": {
+        "DOMAIN": "ledts.bitrix24.ru",
+        "PROTOCOL": "1",
+        "LANG": "ru",
+        "APP_SID": "5692a26ab22f8b93a76eeab6fa51ec57",
+        "AUTH_ID": "1ee9aa68007b749a006cd3c800000302201c07d9a7c6198c5f17881c660b0a38953162",
+        "AUTH_EXPIRES": "3600",
+        "REFRESH_ID": "0e68d268007b749a006cd3c800000302201c072fc52be0daded47afdef575535b1c4cb",
+        "member_id": "2ed3b3005a7c2a8f82e51326f960a106",
+        "status": "L",
+        "PLACEMENT": "DEFAULT",
+        "PLACEMENT_OPTIONS": "{\"any\":\"150\\\/\"}"
+    }
+}

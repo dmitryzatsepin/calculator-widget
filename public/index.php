@@ -2,57 +2,53 @@
 
 declare(strict_types=1);
 
-use Bitrix24\SDK\Services\ServiceBuilderFactory;
-use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\EventDispatcher\EventDispatcher;
-use Psr\Log\NullLogger;
-
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Проверяем наличие основных параметров
-if (!isset($_REQUEST['PLACEMENT']) || 
-    !isset($_REQUEST['AUTH_ID']) || 
-    !isset($_REQUEST['member_id']) || 
-    !isset($_REQUEST['DOMAIN'])) {
-    
-    header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html><html><head><title>Access Denied</title></head><body><div style="padding:20px;text-align:center;"><h3>Доступ запрещен</h3><p>Недостаточно прав для доступа к калькулятору</p></div></body></html>';
-    exit;
+use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
+use Bitrix24\SDK\Services\ServiceBuilderFactory;
+use Symfony\Component\HttpFoundation\Request;
+
+// Проверяем, есть ли токены для работы с SDK
+if (!empty($_REQUEST['AUTH_ID']) && !empty($_REQUEST['REFRESH_ID'])) {
+    $appProfile = ApplicationProfile::initFromArray([
+        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_ID' => 'local.68aadaa8104c18.56085418',
+        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_SECRET' => 'Ykd7eWTSzJIzS9lKa3S02Dc7UVhRW2f7gsbwr1oRzAmGc0W6Qg',
+        'BITRIX24_PHP_SDK_APPLICATION_SCOPE' => 'crm,user,placement'
+    ]);
+
+    try {
+        $B24 = ServiceBuilderFactory::createServiceBuilderFromPlacementRequest(
+            Request::createFromGlobals(), 
+            $appProfile
+        );
+    } catch (Exception $e) {
+        $B24 = null;
+    }
+} else {
+    $B24 = null;
 }
 
-// Инициализируем профиль приложения согласно SDK
-$appProfile = ApplicationProfile::initFromArray([
-    'BITRIX24_PHP_SDK_APPLICATION_CLIENT_ID' => $_REQUEST['AUTH_ID'] ?? '',
-    'BITRIX24_PHP_SDK_APPLICATION_CLIENT_SECRET' => $_REQUEST['REFRESH_ID'] ?? '',
-    'BITRIX24_PHP_SDK_APPLICATION_SCOPE' => 'crm,user,placement'
-]);
+$dealId = $_GET['deal_id'] ?? null;
 
-try {
-    // Создаем сервис с использованием SDK
-    $b24Service = ServiceBuilderFactory::createServiceBuilderFromPlacementRequest(
-        Request::createFromGlobals(), 
-        $appProfile,
-        new EventDispatcher(),
-        new NullLogger()
-    );
-    
-} catch (Exception $e) {
-    header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html><html><head><title>Error</title></head><body><div style="padding:20px;text-align:center;"><h3>Ошибка</h3><p>Не удалось подключиться к Bitrix24</p></div></body></html>';
-    exit;
-}
+// Инициализируем переменные по умолчанию
+$currentUserId = 'unknown';
+$currentUserName = 'Unknown User';
+$dealTitle = null;
 
-// Получаем ID сделки из PLACEMENT_OPTIONS
-$dealId = null;
-if (isset($_REQUEST['PLACEMENT_OPTIONS']) && !empty($_REQUEST['PLACEMENT_OPTIONS'])) {
-    $placementOptions = json_decode($_REQUEST['PLACEMENT_OPTIONS'], true);
-    if (isset($placementOptions['ID']) && !empty($placementOptions['ID']) && $placementOptions['ID'] !== '{{ID}}') {
-        $dealId = $placementOptions['ID'];
+if ($B24 !== null) {
+    try {
+        $currentUser = $B24->core->call('user.current')->getResponseData()->getResult();
+        $currentUserId = $currentUser['ID'];
+        $currentUserName = $currentUser['NAME'] . ' ' . $currentUser['LAST_NAME'];
+        
+        if ($dealId) {
+            $dealData = $B24->core->call('crm.deal.get', ['id' => $dealId])->getResponseData()->getResult();
+            $dealTitle = $dealData['TITLE'];
+        }
+    } catch (Exception $e) {
+        error_log('Bitrix24 SDK Error: ' . $e->getMessage());
     }
 }
-
-$finalDealId = $dealId ?? $_REQUEST['ID'] ?? 'demo';
 
 // Заголовки для работы во фрейме Битрикс24
 header('Access-Control-Allow-Origin: *');
@@ -62,78 +58,64 @@ header('Content-Security-Policy: frame-ancestors * https://ledts.bitrix24.ru htt
 header('X-Frame-Options: ALLOWALL');
 header('X-Content-Type-Options: nosniff');
 
-// Передаем параметры в калькулятор
-$queryParams = http_build_query([
-    'dealId' => $finalDealId,
-    'userId' => 'current',
-    'domain' => $_REQUEST['DOMAIN'],
-    'authId' => $_REQUEST['AUTH_ID'],
-    'memberId' => $_REQUEST['member_id']
-]);
-
-// Показываем калькулятор в iframe
-echo '<!DOCTYPE html>
-<html>
+?>
+<!doctype html>
+<html lang="ru">
 <head>
-    <title>LED Калькулятор</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LED Калькулятор</title>
     <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        .loading { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            background: #f5f5f5; 
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: Arial, sans-serif; 
+            background: #f8f9fa;
         }
-        .spinner { 
-            width: 40px; 
-            height: 40px; 
-            border: 4px solid #f3f3f3; 
-            border-top: 4px solid #3498db; 
-            border-radius: 50%; 
-            animation: spin 1s linear infinite; 
-            margin-right: 15px; 
+        .container {
+            max-width: 100%;
+            margin: 0;
+            background: white;
+            padding: 10px;
         }
-        @keyframes spin { 
-            0% { transform: rotate(0deg); } 
-            100% { transform: rotate(360deg); } 
+        .info-section {
+            background: #e8f4fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 14px;
         }
-        iframe { 
-            width: 100%; 
-            height: 100vh; 
-            border: none; 
-            display: none; 
+        .calculator-frame {
+            width: 100%;
+            height: calc(100vh - 100px);
+            border: none;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="loading" class="loading">
-        <div class="spinner"></div>
-        <div>Идет загрузка приложения LED Калькулятор</div>
+    <div class="container">
+        <?php if ($dealId && $dealTitle): ?>
+        <div class="info-section">
+            <p><strong>Сделка:</strong> <?php echo htmlspecialchars($dealTitle); ?></p>
+        </div>
+        <?php endif; ?>
+        
+        <?php
+        $iframeUrl = "https://dimpin-app.store/apps/led-calculator/?" . http_build_query([
+            'dealId' => $dealId,
+            'userId' => $currentUserId,
+            'domain' => 'ledts.bitrix24.ru',
+            'memberId' => 'current'
+        ]);
+        ?>
+        <iframe id="calculator-frame" 
+                class="calculator-frame"
+                src="<?php echo htmlspecialchars($iframeUrl); ?>"
+                allow="fullscreen"
+                sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-presentation">
+        </iframe>
     </div>
-    
-    <iframe id="calculator-frame" src="https://dimpin-app.store/apps/led-calculator/index.html#' . htmlspecialchars($queryParams, ENT_QUOTES, 'UTF-8') . '" 
-            allow="fullscreen"
-            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-presentation"
-            style="display: none;">
-    </iframe>
-    
-    <script>
-        document.getElementById("calculator-frame").onload = function() {
-            var loading = document.getElementById("loading");
-            var iframe = document.getElementById("calculator-frame");
-            
-            if (loading) {
-                loading.style.display = "none";
-            }
-            
-            if (iframe) {
-                iframe.style.display = "block";
-            }
-        };
-    </script>
 </body>
-</html>';
-?>
+</html>
