@@ -26,7 +26,7 @@ $serviceBuilder = ServiceBuilderFactory::createServiceBuilderFromPlacementReques
 
 try {
     $placementCode = 'CRM_DEAL_DETAIL_ACTIVITY';
-    $handlerUrl = 'https://dimpin-app.store/apps/led-calculator-widget/public/index.php';
+    $handlerUrl = 'https://dimpin-app.store/apps/led-calculator-widget/public/handler.php';
     $lang = ['ru' => ['TITLE' => 'LED Калькулятор']];
 
     $result = $serviceBuilder
@@ -45,7 +45,7 @@ try {
         ?>
         <script src="//api.bitrix24.com/api/v1/"></script>
         <script>
-            BX24.init(function(){
+            BX24.init(function () {
                 BX24.installFinish();
             });
         </script>

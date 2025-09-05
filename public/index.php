@@ -2,120 +2,124 @@
 
 declare(strict_types=1);
 
+use Bitrix24\SDK\Services\ServiceBuilderFactory;
+use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+use Psr\Log\NullLogger;
+use Throwable;
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Bitrix24\SDK\Core\Credentials\ApplicationProfile;
-use Bitrix24\SDK\Services\ServiceBuilderFactory;
-use Symfony\Component\HttpFoundation\Request;
+// Загружаем конфигурацию
+$config = require __DIR__ . '/config.php';
 
-// Проверяем, есть ли токены для работы с SDK
-if (!empty($_REQUEST['AUTH_ID']) && !empty($_REQUEST['REFRESH_ID'])) {
+// Проверяем, установлено ли приложение
+if (!$config['installed'] || empty($config['client_id']) || empty($config['client_secret'])) {
+    die('Приложение не установлено. Выполните установку через install.php');
+}
+
+try {
+    // Создаем профиль приложения из сохраненной конфигурации
     $appProfile = ApplicationProfile::initFromArray([
-        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_ID' => 'local.68aadaa8104c18.56085418',
-        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_SECRET' => 'Ykd7eWTSzJIzS9lKa3S02Dc7UVhRW2f7gsbwr1oRzAmGc0W6Qg',
+        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_ID' => $config['client_id'],
+        'BITRIX24_PHP_SDK_APPLICATION_CLIENT_SECRET' => $config['client_secret'],
         'BITRIX24_PHP_SDK_APPLICATION_SCOPE' => 'crm,user,placement'
     ]);
 
-    try {
-        $B24 = ServiceBuilderFactory::createServiceBuilderFromPlacementRequest(
-            Request::createFromGlobals(), 
-            $appProfile
-        );
-    } catch (Exception $e) {
-        $B24 = null;
-    }
-} else {
-    $B24 = null;
-}
+    $serviceBuilder = ServiceBuilderFactory::createServiceBuilderFromPlacementRequest(
+        Request::createFromGlobals(),
+        $appProfile,
+        new EventDispatcher(),
+        new NullLogger()
+    );
 
-$dealId = $_GET['deal_id'] ?? null;
-
-// Инициализируем переменные по умолчанию
-$currentUserId = 'unknown';
-$currentUserName = 'Unknown User';
-$dealTitle = null;
-
-if ($B24 !== null) {
-    try {
-        $currentUser = $B24->core->call('user.current')->getResponseData()->getResult();
-        $currentUserId = $currentUser['ID'];
-        $currentUserName = $currentUser['NAME'] . ' ' . $currentUser['LAST_NAME'];
-        
-        if ($dealId) {
-            $dealData = $B24->core->call('crm.deal.get', ['id' => $dealId])->getResponseData()->getResult();
-            $dealTitle = $dealData['TITLE'];
-        }
-    } catch (Exception $e) {
-        error_log('Bitrix24 SDK Error: ' . $e->getMessage());
-    }
-}
-
-// Заголовки для работы во фрейме Битрикс24
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Content-Security-Policy: frame-ancestors * https://ledts.bitrix24.ru https://*.bitrix24.ru;');
-header('X-Frame-Options: ALLOWALL');
-header('X-Content-Type-Options: nosniff');
-
-?>
-<!doctype html>
-<html lang="ru">
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>LED Калькулятор</title>
-    <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            font-family: Arial, sans-serif; 
-            background: #f8f9fa;
-        }
-        .container {
-            max-width: 100%;
-            margin: 0;
-            background: white;
-            padding: 10px;
-        }
-        .info-section {
-            background: #e8f4fd;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        .calculator-frame {
-            width: 100%;
-            height: calc(100vh - 100px);
-            border: none;
-            border-radius: 5px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <?php if ($dealId && $dealTitle): ?>
-        <div class="info-section">
-            <p><strong>Сделка:</strong> <?php echo htmlspecialchars($dealTitle); ?></p>
+    // Здесь ваш основной код приложения
+    // Например, получение данных о сделке, контакте и т.д.
+    
+    ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>LED Калькулятор</title>
+        <script src="//api.bitrix24.com/api/v1/"></script>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .calculator { max-width: 600px; margin: 0 auto; }
+            .form-group { margin-bottom: 15px; }
+            label { display: block; margin-bottom: 5px; font-weight: bold; }
+            input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+            button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+            .result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <div class="calculator">
+            <h1>LED Калькулятор</h1>
+            <p>Рассчитайте стоимость LED освещения для вашего проекта</p>
+            
+            <div class="form-group">
+                <label for="area">Площадь помещения (м²):</label>
+                <input type="number" id="area" min="1" step="0.1">
+            </div>
+            
+            <div class="form-group">
+                <label for="brightness">Требуемая освещенность (люкс):</label>
+                <input type="number" id="brightness" min="100" step="10" value="300">
+            </div>
+            
+            <div class="form-group">
+                <label for="efficiency">Эффективность светильников (лм/Вт):</label>
+                <input type="number" id="efficiency" min="50" step="1" value="120">
+            </div>
+            
+            <button onclick="calculate()">Рассчитать</button>
+            
+            <div id="result" class="result" style="display: none;"></div>
         </div>
-        <?php endif; ?>
-        
-        <?php
-        $iframeUrl = "https://dimpin-app.store/apps/led-calculator/?" . http_build_query([
-            'dealId' => $dealId,
-            'userId' => $currentUserId,
-            'domain' => 'ledts.bitrix24.ru',
-            'memberId' => 'current'
-        ]);
-        ?>
-        <iframe id="calculator-frame" 
-                class="calculator-frame"
-                src="<?php echo htmlspecialchars($iframeUrl); ?>"
-                allow="fullscreen"
-                sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-presentation">
-        </iframe>
-    </div>
-</body>
-</html>
+
+        <script>
+            BX24.init(function(){
+                console.log('LED Калькулятор загружен');
+            });
+
+            function calculate() {
+                const area = parseFloat(document.getElementById('area').value);
+                const brightness = parseFloat(document.getElementById('brightness').value);
+                const efficiency = parseFloat(document.getElementById('efficiency').value);
+                
+                if (!area || !brightness || !efficiency) {
+                    alert('Пожалуйста, заполните все поля');
+                    return;
+                }
+                
+                // Расчет мощности
+                const totalLumens = area * brightness;
+                const totalPower = totalLumens / efficiency;
+                const fixtureCount = Math.ceil(area / 10); // Примерно 1 светильник на 10 м²
+                const powerPerFixture = totalPower / fixtureCount;
+                
+                // Расчет стоимости (примерные цены)
+                const fixturePrice = 1500; // руб за светильник
+                const installationPrice = 500; // руб за монтаж
+                const totalCost = fixtureCount * (fixturePrice + installationPrice);
+                
+                const result = document.getElementById('result');
+                result.innerHTML = `
+                    <h3>Результаты расчета:</h3>
+                    <p><strong>Общая мощность:</strong> ${totalPower.toFixed(1)} Вт</p>
+                    <p><strong>Количество светильников:</strong> ${fixtureCount} шт</p>
+                    <p><strong>Мощность на светильник:</strong> ${powerPerFixture.toFixed(1)} Вт</p>
+                    <p><strong>Примерная стоимость:</strong> ${totalCost.toLocaleString()} руб</p>
+                `;
+                result.style.display = 'block';
+            }
+        </script>
+    </body>
+    </html>
+    <?php
+
+} catch (Throwable $e) {
+    die('Ошибка приложения: ' . $e->getMessage());
+}
